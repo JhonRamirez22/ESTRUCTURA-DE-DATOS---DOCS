@@ -41,3 +41,45 @@ Se probó en PostgreSQL local (`docker compose`, puerto 5433), no en RDS.
 La reversión de aplicación conserva estas tablas: no ejecutar downgrade destructivo.
 El despliegue requiere confirmación para aplicar la migración a producción.
 
+Los tests de negocio aíslan autenticación mediante una dependencia de prueba.
+`test_auth_api.py`, `test_access_sessions.py` y `test_security_postgres.py` verifican
+autenticación real y no emplean esa sustitución.
+
+Verificación de este bloque: 332 tests backend, 73 frontend, 6 integraciones
+PostgreSQL; Ruff, mypy, TypeScript, ESLint y build pasan. Playwright: 14/15;
+queda reproducido el fallo preexistente de estabilidad de la animación del dock
+(`dock.spec.ts`); se corrige en el bloque visual, sin forzar clics ni omitir tests.
+
+## Direcciones por texto
+
+`POST /api/v1/direcciones/resolver` requiere despacho, CSRF y límite compartido
+de 30 búsquedas/minuto por cuenta. El formulario espera 500 ms, cancela búsquedas
+anteriores y descarta respuestas tardías. La alternativa manual permanece disponible.
+
+Primero normaliza abreviaturas y consulta TomTom restringido a Colombia/Pasto.
+Si no encuentra candidatos, pide interpretación a la IA autorizada y vuelve a
+geocodificar. La IA no aporta coordenadas ni puede cambiar números u orientación.
+Los resultados de otros municipios/países o fuera del área se descartan.
+Una numeración incompleta nunca se presenta como dirección exacta; el usuario
+confirma explícitamente cualquier candidato antes de registrar el pedido.
+
+Para Groq: `AI_TRAFFIC_PROVIDER=groq`, credenciales `CUSTOMER_CHAT_*` y
+`AI_ALLOW_LOCATION_DATA_SHARING=true` tras autorizar el envío. Sin autorización,
+TomTom y normalización local siguen funcionando sin enviar texto a IA.
+
+Verificado con proveedores simulados: 344 tests backend, 76 frontend y un E2E
+específico de búsqueda sin pin/confirmación. Build, tipos y lint pasan.
+La disponibilidad/cuota real de proveedores se verificará con credenciales rotadas
+antes del lanzamiento; estos tests no consumen APIs externas.
+
+## Bloques restantes del plan aprobado
+
+- Autorización temporal de seguimiento por pedido, límites compartidos restantes,
+  paginación y CSP del frontend; revisión de dependencias y rotación de secretos.
+- Teselas transparentes de tráfico por proxy autenticado; caché/estado de cobertura,
+  cámara independiente del GPS, agrupación y recuperación de capas.
+- Interfaz marfil/beige/café, mapa claro y rutas verdes. Propuesta visual local
+  presentada; todavía no se sustituyó el diseño de la aplicación.
+- Pruebas finales completas y despliegue canario AWS/Vercel, previa confirmación
+  de migración y credenciales nuevas. La sesión AWS actual corresponde a root;
+  no se utilizará para lanzar cambios antes de preparar un rol limitado.
