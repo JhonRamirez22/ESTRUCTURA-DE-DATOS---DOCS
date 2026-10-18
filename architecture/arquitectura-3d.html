@@ -430,3 +430,218 @@
           color: 0x263b30,
           roughness: .38,
           metalness: .22,
+          emissive: node.color,
+          emissiveIntensity: .04
+        });
+        const body = new THREE.Mesh(new THREE.BoxGeometry(3.35, 1.42, 1.45), material);
+        body.userData.nodeId = node.id;
+        group.add(body);
+        const faceMaterial = new THREE.MeshBasicMaterial({ map: makeFaceTexture(node.title, node.small, node.color), transparent: false });
+        const face = new THREE.Mesh(new THREE.PlaneGeometry(3.18, 1.22), faceMaterial);
+        face.position.set(0, 0, .733);
+        face.userData.nodeId = node.id;
+        group.add(face);
+        const pin = new THREE.Mesh(new THREE.SphereGeometry(.12, 16, 12), new THREE.MeshBasicMaterial({ color: node.color }));
+        pin.position.set(1.38, .48, .78);
+        group.add(pin);
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(1.93, .055, 8, 40), new THREE.MeshBasicMaterial({ color: 0xe879f9, transparent: true, opacity: .95 }));
+        ring.position.set(0, 0, .8);
+        ring.visible = false;
+        group.add(ring);
+        scene.add(group);
+        nodeMeshes.set(node.id, { group, body, ring, pin });
+      }
+
+      function createConnection(edge, index) {
+        const from = nodeById.get(edge.from);
+        const to = nodeById.get(edge.to);
+        const startCenter = new THREE.Vector3(from.x, from.y, from.z);
+        const endCenter = new THREE.Vector3(to.x, to.y, to.z);
+        const direction = endCenter.clone().sub(startCenter).normalize();
+        const start = startCenter.add(direction.clone().multiplyScalar(1.88));
+        const end = endCenter.sub(direction.clone().multiplyScalar(1.88));
+        const control = start.clone().add(end).multiplyScalar(.5);
+        control.z += (index % 2 === 0 ? 1 : -1) * .65;
+        control.y += (index % 3 - 1) * .34;
+        const curve = new THREE.QuadraticBezierCurve3(start, control, end);
+        const tube = new THREE.Mesh(
+          new THREE.TubeGeometry(curve, 28, .025, 5, false),
+          new THREE.MeshBasicMaterial({ color: 0x536e5d, transparent: true, opacity: .36 })
+        );
+        const arrow = new THREE.Mesh(new THREE.ConeGeometry(.14, .34, 12), new THREE.MeshBasicMaterial({ color: 0x536e5d, transparent: true, opacity: .46 }));
+        const arrowPosition = curve.getPoint(.98);
+        arrow.position.copy(arrowPosition);
+        arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), curve.getTangent(.98).normalize());
+        const particle = new THREE.Mesh(new THREE.SphereGeometry(.09, 12, 10), new THREE.MeshBasicMaterial({ color: 0x68e3a2 }));
+        particle.visible = false;
+        const label = makeLaneLabel(edge.label, 0, -100, 0);
+        label.visible = false;
+        label.scale.set(3.2, .5, 1);
+        label.position.copy(curve.getPoint(.52));
+        label.position.y += .38;
+        scene.add(tube, arrow, particle);
+        edgeMeshes.set(edge.id, { curve, tube, arrow, particle, label, index });
+      }
+
+      function updateSceneState() {
+        if (!renderer || nodeMeshes.size !== nodes.length || edgeMeshes.size !== edges.length) return;
+        const flow = flows[activeFlow];
+        const step = flow.steps[activeStep];
+        const flowEdges = new Set(flow.edges);
+        const stepEdges = new Set(step.edges);
+        const stepNodes = new Set(step.nodes);
+        for (const node of nodes) {
+          const visual = nodeMeshes.get(node.id);
+          const active = stepNodes.has(node.id);
+          visual.body.material.emissiveIntensity = node.id === selectedId ? .22 : active ? .16 : flow.nodes?.includes(node.id) ? .08 : .025;
+          visual.body.material.color.setHex(active ? 0x294a38 : flow.nodes?.includes(node.id) ? 0x20372d : 0x1a2821);
+          visual.ring.visible = node.id === selectedId;
+          visual.pin.material.color.setHex(node.id === selectedId ? 0xe879f9 : node.color);
+        }
+        for (const edge of edges) {
+          const visual = edgeMeshes.get(edge.id);
+          const inFlow = flowEdges.has(edge.id);
+          const featured = stepEdges.has(edge.id);
+          visual.tube.material.color.setHex(featured ? 0x68e3a2 : inFlow ? 0x55916c : 0x455b4e);
+          visual.tube.material.opacity = featured ? .96 : inFlow ? .48 : .21;
+          visual.arrow.material.color.setHex(featured ? 0x68e3a2 : inFlow ? 0x55916c : 0x455b4e);
+          visual.arrow.material.opacity = featured ? .98 : inFlow ? .55 : .25;
+          visual.particle.visible = featured;
+          visual.label.visible = featured && window.innerWidth > 760;
+        }
+      }
+
+      function resize() {
+        if (!renderer || !camera) return;
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        renderer.setSize(width, height, false);
+        camera.aspect = width / height;
+        camera.fov = width < 760 ? 46 : 42;
+        camera.updateProjectionMatrix();
+      }
+
+      function updateCamera() {
+        const baseDistance = window.innerWidth < 760 ? 30 : 22;
+        const distance = baseDistance / zoom;
+        const offset = new THREE.Vector3(
+          distance * Math.sin(yaw) * Math.cos(pitch),
+          distance * Math.sin(pitch),
+          distance * Math.cos(yaw) * Math.cos(pitch)
+        );
+        camera.position.copy(cameraTarget).add(offset);
+        camera.lookAt(cameraTarget);
+      }
+
+      function animate(time) {
+        requestAnimationFrame(animate);
+        updateCamera();
+        if (!reducedMotion) {
+          for (const visual of edgeMeshes.values()) {
+            if (!visual.particle.visible) continue;
+            const progress = (time * .00016 + visual.index * .19) % .82 + .08;
+            visual.particle.position.copy(visual.curve.getPoint(progress));
+          }
+        }
+        renderer.render(scene, camera);
+      }
+
+      function initScene() {
+        if (!window.THREE) {
+          showSceneError('No se pudo cargar el motor 3D. Revisa la conexión al CDN de Three.js y vuelve a abrir esta página.');
+          return;
+        }
+        try {
+          renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+          renderer.setClearColor(0x0d1411, 1);
+          scene = new THREE.Scene();
+          scene.background = new THREE.Color(0x0d1411);
+          scene.fog = new THREE.Fog(0x0d1411, 34, 100);
+          camera = new THREE.PerspectiveCamera(42, 1, .1, 180);
+        cameraTarget = new THREE.Vector3(0, 0, 0);
+          scene.add(new THREE.AmbientLight(0xd9f2e1, .78));
+          const key = new THREE.DirectionalLight(0xe4fff0, 1.25);
+          key.position.set(-8, 14, 12);
+          scene.add(key);
+          const fill = new THREE.PointLight(0x316f4c, 1.15, 55);
+          fill.position.set(4, -1, -8);
+          scene.add(fill);
+          const grid = new THREE.GridHelper(64, 32, 0x365443, 0x19271f);
+          grid.position.y = -5.7;
+          grid.material.transparent = true;
+          grid.material.opacity = .28;
+          scene.add(grid);
+          makeLaneLabel('CLIENTES', -9.2, 5.4, -.5);
+          makeLaneLabel('ENTRADA HTTP', -9.2, 2.65, -.5);
+          makeLaneLabel('API · CONTRATOS · CASOS DE USO', -9.2, -.45, -.5);
+          makeLaneLabel('ALGORITMOS · CALLES · TRÁFICO', -9.2, -3.15, -.5);
+          makeLaneLabel('PERSISTENCIA', -2.7, -5.9, 3.5);
+          nodes.forEach(createNode);
+          edges.forEach(createConnection);
+          resize();
+          animate(0);
+          updateSceneState();
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          showSceneError(`No se pudo iniciar la escena 3D: ${detail}`);
+        }
+      }
+
+      nodes.forEach(node => {
+        const option = document.createElement('option');
+        option.value = node.id;
+        option.textContent = node.name;
+        picker.append(option);
+      });
+      document.querySelectorAll('[data-flow]').forEach(button => button.addEventListener('click', () => setFlow(button.dataset.flow)));
+      document.getElementById('step-back').addEventListener('click', () => showStep(activeStep - 1));
+      document.getElementById('step-forward').addEventListener('click', () => showStep(activeStep + 1));
+      document.getElementById('reset-camera').addEventListener('click', () => {
+        yaw = -.38;
+        pitch = .44;
+        zoom = 1;
+        resetOverviewTarget();
+        status.textContent = 'Vista general restablecida.';
+      });
+      picker.addEventListener('change', () => selectNode(picker.value, false, true));
+      window.addEventListener('resize', resize);
+      canvas.addEventListener('pointerdown', event => {
+        drag = { x: event.clientX, y: event.clientY, yaw, pitch, distance: 0 };
+        canvas.setPointerCapture(event.pointerId);
+      });
+      canvas.addEventListener('pointermove', event => {
+        if (!drag) return;
+        const dx = event.clientX - drag.x;
+        const dy = event.clientY - drag.y;
+        drag.distance += Math.abs(dx) + Math.abs(dy);
+        drag.x = event.clientX;
+        drag.y = event.clientY;
+        if (drag.distance > 3) {
+          yaw -= dx * .005;
+          pitch = Math.max(-.05, Math.min(1.1, pitch + dy * .004));
+        }
+      });
+      canvas.addEventListener('pointerup', event => {
+        if (drag && drag.distance < 5 && renderer) {
+          const rect = canvas.getBoundingClientRect();
+          pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
+          raycaster.setFromCamera(pointer, camera);
+          const hit = raycaster.intersectObjects([...nodeMeshes.values()].flatMap(visual => visual.group.children))[0];
+          const id = hit?.object.userData.nodeId;
+          if (id) selectNode(id, true, true);
+        }
+        drag = null;
+      });
+      canvas.addEventListener('pointercancel', () => { drag = null; });
+      canvas.addEventListener('wheel', event => {
+        event.preventDefault();
+        zoom = Math.max(.55, Math.min(1.8, zoom * (event.deltaY > 0 ? .92 : 1.08)));
+      }, { passive: false });
+
+      initScene();
+      showStep(0);
+    })();
+  </script>
+</body>
+</html>
