@@ -111,3 +111,116 @@ Secretos creados por la pila: `rutas-pasto/dev/auth-secret`,
 `rutas-pasto/dev/dispatcher-access-code` y `rutas-pasto/dev/integrations`.
 
 ## RDS PostgreSQL rutas_pasto
+
+Instancia `rutaspastoaws-dev-postgresdatabase0a8a7373-v9wqpv10dg9b`:
+PostgreSQL `16.15`, clase `db.t3.micro`, 20 GB, `available`, **no pública**,
+sin Multi-AZ. Base de datos `rutas_pasto`, usuario de aplicación `rutas_app` y
+usuario administrador `rutas_admin`.
+
+Se conecta con `verify-full` y el bundle CA global de RDS descargado en la
+imagen (`backend/Dockerfile` instala `rds-global-bundle.pem`).
+
+## VPC y red privada
+
+VPC `vpc-032e464082e4f4481` con cuatro subredes (dos privadas en
+`subnet-0f3d2a42a97466702`/`subnet-05157ec9324d1c505`, que son las que exporta
+`PrivateSubnetIds`), tabla de rutas con NAT Gateway (`nat-0117450430bc5d9a0`,
+EIP `52.70.22.37`) e Internet Gateway. El RDS vive en el grupo de subredes
+`rutaspastoaws-dev-postgresdatabasesubnetgroup…` y no acepta conexiones desde
+Internet.
+
+Grupos de seguridad: `sg-0291b789c99b6c3a8` (backend, exportado como
+`BackendSecurityGroupId`) y `sg-0913033e412188011` con una regla de ingreso.
+
+## Tareas puntuales de base de datos
+
+Dos task definitions Fargate de 256/512 usadas por
+`deploy/aws/scripts/run-database-task.sh`:
+
+- `rutas-pasto-dev-database-bootstrap:5`, contenedor `BootstrapDatabaseRole`,
+  comando `python -m scripts.bootstrap_database_role`, logs en
+  `/aws/ecs/rutas-pasto/dev/db-bootstrap`.
+- `rutas-pasto-dev-database-migrate:5`, contenedor `AlembicMigration`,
+  comando `alembic upgrade head`, logs en `/aws/ecs/rutas-pasto/dev/db-migrate`.
+
+Ambas comparten imagen con el backend y reciben `DATABASE_ADMIN_PASSWORD` /
+`DATABASE_PASSWORD` desde Secrets Manager.
+
+## Registro de imágenes ECR
+
+No hay repositorio ECR propio de Rutas Pasto: la imagen se publica en el
+repositorio de assets `cdk-hnb659fds-container-assets-762911134095-us-east-1`,
+que es el mecanismo de *container asset* del bootstrap de CDK.
+
+Los únicos repositorios de la región son ese y
+`reproductor-estructuras-datos-api` (otro proyecto).
+
+## Alarmas de CloudWatch
+
+Tres alarmas propias del proyecto, todas en estado sano:
+
+- `rutas-pasto-dev/rutas-pasto-dev-api-public/RollbackAlarm` → `OK`
+- `TargetTracking-…/rutas-pasto-dev-api-public-AlarmHigh-…` → `OK`
+- `TargetTracking-…/rutas-pasto-dev-api-public-AlarmLow-…` → `ALARM`
+  (estado esperado cuando la escala está en el mínimo)
+
+Los grupos de logs `/aws/ecs/rutas-pasto/dev/backend`, `…/db-bootstrap` y
+`…/db-migrate` tienen retención de 30 días y 0 bytes almacenados, es decir,
+todavía no se ha acumulado historial de ejecución.
+
+## Frontend Next.js no desplegado en AWS
+
+En la pila no hay ALB, ni servicio de frontend, ni salida `ApplicationUrl`, ni
+ALB público alguno. No existen hosted zones en Route 53, ni distribuciones de
+CloudFront para el proyecto, ni aplicaciones Amplify, ni API Gateway, ni
+Lambda, ni DynamoDB, ni EKS, ni App Runner.
+
+El frontend está previsto para Vercel: `vercel.json` define los servicios
+`frontend` (Next.js) y `backend`, y `PLAN.md` y `AGENTS.md` fijan Vercel
+Services como objetivo de despliegue. La API de Vercel no está conectada como
+MCP, por lo que este documento solo afirma que el frontend **no** está en AWS.
+
+## Drift entre el CDK del repositorio y la pila desplegada
+
+La pila desplegada no coincide con `deploy/aws/lib/rutas-pasto-stack.ts` del
+repositorio:
+
+- Desplegado: `AWS::ECS::ExpressGatewayService`, task definition
+  `rutas-pasto-dev-api`, contenedor `Main`, salida `BackendUrl` en
+  `*.ecs.us-east-1.on.aws`.
+- Repositorio: `ApplicationLoadBalancer`, `FrontendService`, salida
+  `ApplicationUrl`, contenedor `FastApi`, familia
+  `rutas-pasto-dev-<entorno>-backend`.
+
+Además, el despliegue usa `TEXTBEE_*` y `AI_TRAFFIC_PROVIDER=groq` (Twilio solo
+aparece en `INTEGRATION_SECRET_FIELDS` del CDK) y fija
+`AI_ALLOW_LOCATION_DATA_SHARING=true` frente a `false` en el repositorio.
+Ninguna de esas cadenas aparece en el historial de git
+(`git log -S ExpressGateway` y `-S BackendUrl` no devuelven commits), y no hay
+directorio `cdk.out` que documente la síntesis usada.
+
+Conclusión: la infraestructura vigente se sintetizó desde una versión del stack
+que no está en este repositorio.
+
+## Otros proyectos en la misma cuenta
+
+No forman parte de este proyecto pero comparten cuenta y región:
+
+- ECS `default/reproductor-estructuras-datos-api` (1 tarea Fargate RUNNING,
+  creado el 2026-10-02) con ECR propio y alarmas de autoescalado.
+- Aurora PostgreSQL serverless `reproductor-estructuras-datos-prod-instance-1`
+  (17.9) y secreto `/reproductor/prod/cookie-secret`.
+- EC2 `ritech-web` (t3.small, perfil `ritech-ec2-deploy`), secreto
+  `ritech/production` y CloudFront `d3preziqjebh2s.cloudfront.net`
+  («RiTech Export website production origin»).
+
+## Verificación de salud
+
+| Comprobación | Resultado |
+| --- | --- |
+| `GET /api/health` | `200` — `status=ok`, `database=ok` |
+| Tarea Fargate del servicio | `RUNNING`, despliegue `COMPLETED` |
+| Instancia RDS | `available` |
+| RollbackAlarm | `OK` |
+| Frontend en AWS | ausente por diseño (Vercel) |
+| Historial de logs | vacío (0 bytes) |
