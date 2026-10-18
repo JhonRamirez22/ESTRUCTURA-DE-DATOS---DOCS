@@ -80,3 +80,44 @@ sequenceDiagram
         Repartidor->>API: Reporta posición GPS autenticada
         API->>API: Cola FIFO serializa el evento GPS
         API->>DB: Persiste la ubicación y consulta la siguiente parada
+        alt Está dentro de 500 m y el canal sigue autorizado
+            API->>DB: Encola un único aviso de cercanía
+            alt Proveedor configurado
+                API->>Canal: Intenta entrega después del commit
+                Canal-->>Cliente: Aviso de asignación o cercanía
+            else Proveedor sin configurar
+                Note over API,DB: El aviso permanece pendiente; no se finge su entrega
+            end
+        else Lejos o sin consentimiento
+            Note over API,DB: No se encola ningún aviso de cercanía
+        end
+    end
+```
+
+Los 500 m son una señal geodésica de proximidad, no una ruta peatonal ni una promesa
+de hora de llegada. Antes de entregar cada aviso se vuelven a validar el consentimiento
+y el dato de contacto actual. Sin credenciales SMTP/Twilio, los avisos no se simulan como enviados:
+quedan pendientes. El worker periódico de reintentos requiere un proceso persistente; en AWS se
+ejecuta dentro del servicio FastAPI de ECS, no en una función efímera.
+
+## Despliegue AWS preparado
+
+El frontend Next.js, la API FastAPI y PostgreSQL se operan como componentes
+independientes: dos imágenes/conjuntos de tareas ECS y una instancia RDS privada.
+El ALB mantiene un solo origen para el navegador (`/api/*` hacia FastAPI y el
+resto hacia Next.js). Alembic corre en una tarea puntual antes de habilitar los
+servicios web. La infraestructura y su procedimiento local están en
+[`docs/deployment/aws-cdk.md`](../deployment/aws-cdk.md); no implica que recursos hayan
+sido creados en AWS.
+
+## Límites deliberados
+
+- El mapa y la geometría representan calles oficiales devueltas por OSRM, no líneas
+  rectas entre coordenadas.
+- Dijkstra/A* y el grafo propio muestran el núcleo académico; el enrutamiento real
+  usa OSRM para reflejar la red vial de Pasto.
+- TomTom cubre solo tramos muestreados. El ETA se presenta como aproximado.
+- El chat responde sobre la guía consultada. Solo recibe la pregunta normalizada,
+  estados permitidos y, si se pregunta por llegada, el ETA aproximado disponible.
+- Correo y SMS requieren consentimiento individual por canal y credenciales privadas
+  en el backend.
