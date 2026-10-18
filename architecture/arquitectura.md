@@ -39,3 +39,44 @@ backend vuelve a pedir la geometría vial antes de persistir la ruta.
 | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Lista simplemente enlazada + cola FIFO | Serializa escrituras de ubicación GPS y aplica backpressure.                                                               | [`queue.py`](../../backend/app/core/structures/queue.py), [`location_event_queue.py`](../../backend/app/services/location_event_queue.py)                                                                                       |
 | Lista simplemente enlazada + pila LIFO | Deshace el último recálculo usando snapshots persistidos de la ruta.                                                       | [`stack.py`](../../backend/app/core/structures/stack.py), [`route_planner.py`](../../backend/app/services/route_planner.py)                                                                                                     |
+| Lista doblemente enlazada              | Cachés LRU de matrices de duración y segmentos de tráfico; las referencias a nodos permiten moverlos o retirarlos en O(1). | [`doubly_linked_list.py`](../../backend/app/core/structures/doubly_linked_list.py), [`cached_matrix_provider.py`](../../backend/app/core/routing/cached_matrix_provider.py), [`traffic.py`](../../backend/app/services/traffic.py) |
+| Grafo dirigido + min-heap              | Dijkstra y A* sobre aristas ponderadas; son algoritmos del núcleo, no reemplazan el grafo vial de OSRM en producción.      | [`graph.py`](../../backend/app/core/graph/graph.py), [`min_heap.py`](../../backend/app/core/structures/min_heap.py), [`dijkstra.py`](../../backend/app/core/graph/dijkstra.py), [`astar.py`](../../backend/app/core/graph/astar.py)   |
+| Vecino más cercano + 2-opt             | Propone y mejora el orden de visita a partir de la matriz de tiempos viales.                                               | [`nearest_neighbor.py`](../../backend/app/core/optimization/nearest_neighbor.py), [`two_opt.py`](../../backend/app/core/optimization/two_opt.py)                                                                                |
+| Asignación por cercanía y balance      | Agrupa pedidos para los repartidores seleccionados antes de optimizar cada ruta.                                           | [`assign_orders.py`](../../backend/app/core/optimization/assign_orders.py)                                                                                                                                                   |
+
+## Seguimiento, chat y avisos al cliente
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Cliente
+    participant UI as Next.js / TypeScript
+    participant API as FastAPI / Python
+    participant DB as PostgreSQL
+    participant IA as Proveedor de chat
+    participant Repartidor
+    participant Canal as SMTP / Twilio
+
+    Cliente->>UI: Consulta la guía y pregunta por el pedido
+    UI->>API: guía + pregunta
+    API->>DB: Resuelve la guía y obtiene estado de ese pedido
+    API->>API: Sustituye el texto libre por una intención canónica
+    opt La pregunta pide hora o tiempo de llegada
+        API->>API: Añade solo el ETA aproximado disponible
+    end
+    API->>IA: Intención canónica + estados permitidos
+    alt El proveedor responde
+        IA-->>API: Respuesta breve sobre ese pedido
+    else Timeout, rate limit o error del proveedor
+        API->>API: Respuesta local basada en el estado verificado y ETA disponible
+    end
+    API-->>UI: Respuesta y seguimiento
+    UI-->>Cliente: Estado, mapa y chat
+
+    Note over API,IA: La guía, dirección, coordenadas, nombre, teléfono e IDs internos no se envían al modelo.
+
+    opt El cliente autorizó correo, SMS o ambos
+        API->>DB: Guarda el aviso de asignación en el outbox con la ruta
+        Repartidor->>API: Reporta posición GPS autenticada
+        API->>API: Cola FIFO serializa el evento GPS
+        API->>DB: Persiste la ubicación y consulta la siguiente parada
