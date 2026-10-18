@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Arquitectura de Rutas Pasto · Recorrido 3D</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0d1411;
+      --panel: rgba(19, 29, 24, .94);
+      --line: #2a3b32;
+      --ink: #e8f1eb;
+      --mute: #a4b8aa;
+      --green: #68e3a2;
+      --teal: #2dd4bf;
+      --amber: #f0bd68;
+      --violet: #e879f9;
+      --blue: #8bb8ed;
+      font: 15px/1.45 "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: var(--bg); color: var(--ink); }
+    button, select { color: inherit; font: inherit; }
+    button, select, a { -webkit-tap-highlight-color: transparent; }
+    button:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+    #architecture-scene { position: fixed; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+    #architecture-scene:active { cursor: grabbing; }
+    .panel {
+      position: fixed;
+      z-index: 2;
+      top: 12px;
+      bottom: 12px;
+      left: 12px;
+      display: flex;
+      width: min(380px, calc(100vw - 24px));
+      flex-direction: column;
+      gap: 15px;
+      padding: 19px;
+      overflow: auto;
+      border: 1px solid rgba(101, 140, 119, .31);
+      border-radius: 16px;
+      background: var(--panel);
+      backdrop-filter: blur(13px);
+      box-shadow: 0 20px 70px rgba(0, 0, 0, .36);
+      scrollbar-color: #42584a transparent;
+    }
+    .eyebrow { margin: 0 0 4px; color: var(--green); font-size: 12px; font-weight: 700; letter-spacing: .15em; text-transform: uppercase; }
+    h1 { margin: 0; font-size: 25px; line-height: 1.14; letter-spacing: -.03em; }
+    .intro { margin: 7px 0 0; color: var(--mute); font-size: 14px; }
+    .section-title { margin: 0 0 7px; color: #9fb8a9; font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    .flow-controls, .step-controls, .legend { display: flex; flex-wrap: wrap; gap: 7px; }
+    .flow-button, .step-button, .reset-button {
+      min-height: 42px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: rgba(26, 39, 32, .9);
+      cursor: pointer;
+      transition: background .15s ease, border-color .15s ease, color .15s ease;
+    }
+    .flow-button { flex: 1 1 30%; font-size: 13px; }
+    .flow-button:hover, .step-button:hover:not(:disabled), .reset-button:hover { border-color: #548469; background: #20362b; }
+    .flow-button[aria-pressed="true"] { border-color: var(--green); background: rgba(44, 102, 69, .43); color: #c7f6d9; }
+    .walkthrough { padding-top: 12px; border-top: 1px solid rgba(130, 161, 141, .17); }
+    .step-count { color: var(--green); font-variant-numeric: tabular-nums; }
+    .step-heading { margin: 5px 0 3px; font-size: 18px; line-height: 1.22; }
+    .step-copy { min-height: 62px; margin: 0; color: #c0cec4; font-size: 14px; }
+    .progress { height: 4px; margin: 11px 0 10px; overflow: hidden; border-radius: 4px; background: rgba(120, 148, 129, .2); }
+    .progress span { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--green); transition: width .2s ease; }
+    .step-controls { justify-content: space-between; }
+    .step-button { flex: 1; }
+    .step-button:disabled { cursor: default; opacity: .42; }
+    .reset-button { min-height: 38px; padding: 6px 10px; color: var(--mute); font-size: 13px; }
+    .component { padding-top: 13px; border-top: 1px solid rgba(130, 161, 141, .17); }
+    .component-type { color: var(--teal); font-size: 12px; font-weight: 650; letter-spacing: .1em; text-transform: uppercase; }
+    .component-name { margin: 4px 0 5px; font-size: 21px; line-height: 1.18; }
+    .component-copy { margin: 0; color: #c0cec4; font-size: 14px; }
+    .tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }
+    .tag-list li { padding: 3px 8px; border: 1px solid rgba(104, 227, 162, .2); border-radius: 99px; color: #bce4ca; font-size: 12px; }
+    .source-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+    .source-list { display: grid; gap: 6px; max-height: 180px; overflow: auto; }
+    .source-link { display: block; padding: 7px 9px; border: 1px solid rgba(117, 146, 127, .19); border-radius: 8px; color: inherit; text-decoration: none; overflow-wrap: anywhere; }
+    .source-link:hover { border-color: rgba(104, 227, 162, .62); background: rgba(55, 89, 67, .22); }
+    .source-link strong { display: block; color: #e3eee6; font-size: 13px; font-weight: 600; }
+    .source-link small { display: block; margin-top: 2px; color: #a4b8aa; font-size: 12px; }
+    .open-option { display: flex; align-items: flex-start; gap: 8px; color: var(--mute); font-size: 13px; }
+    .open-option input { flex: 0 0 auto; width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--green); }
+    .status { min-height: 20px; margin: 0; color: #a5dbb7; font-size: 12px; }
+    .legend {
+      position: fixed;
+      z-index: 1;
+      top: 14px;
+      right: 16px;
+      align-items: center;
+      gap: 13px;
+      padding: 9px 12px;
+      border: 1px solid rgba(101, 140, 119, .25);
+      border-radius: 10px;
+      background: rgba(13, 20, 17, .77);
+      color: var(--mute);
+      font-size: 12px;
+      backdrop-filter: blur(8px);
+    }
+    .legend-item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+    .legend-mark { width: 16px; height: 4px; border-radius: 4px; background: var(--green); }
+    .legend-mark.base { background: #587162; }
+    .legend-mark.selected { width: 9px; height: 9px; border-radius: 50%; background: var(--violet); }
+    .legend-mark.database { background: var(--amber); }
+    .hint { position: fixed; z-index: 1; right: 16px; bottom: 14px; color: #b1c2b6; font-size: 12px; text-align: right; text-shadow: 0 1px 5px #000; }
+    .hint span { display: block; }
+    .error { position: fixed; z-index: 4; inset: auto 12px 12px auto; max-width: 420px; padding: 12px 16px; border: 1px solid #b35e64; border-radius: 10px; background: #2b191b; color: #ffd9d9; }
+    @media (max-width: 760px) {
+      .panel { top: auto; right: 8px; bottom: 8px; left: 8px; width: auto; max-height: 55vh; gap: 11px; padding: 14px; }
+      h1 { font-size: 21px; }
+      .intro { font-size: 13px; }
+      .step-copy { min-height: 0; }
+      .source-list { max-height: 116px; }
+      .legend { top: 9px; right: 9px; max-width: calc(100vw - 18px); gap: 9px; padding: 7px 9px; font-size: 11px; }
+      .legend-item { gap: 4px; }
+      .hint { display: none; }
+    }
+    @media (max-width: 430px) {
+      .panel { max-height: 58vh; padding: 12px; }
+      .flow-button { min-height: 40px; padding: 7px 5px; font-size: 12px; }
+      .legend-item.optional { display: none; }
+      .component-name { font-size: 19px; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; } }
+  </style>
+</head>
+<body>
+  <canvas id="architecture-scene" role="img" aria-label="Diagrama de arquitectura 3D de Rutas Pasto. Arrastra para orbitar; selecciona un bloque para inspeccionar el componente."></canvas>
+
+  <aside class="panel" aria-label="Recorrido de la arquitectura">
+    <header>
+      <p class="eyebrow">Rutas Pasto · vista técnica</p>
+      <h1>Cómo viaja una entrega</h1>
+      <p class="intro">Recorre la comunicación entre clientes, backend y datos. Cada bloque abre la explicación y los archivos que implementan su función.</p>
+    </header>
+
+    <section aria-labelledby="flow-title">
+      <h2 class="section-title" id="flow-title">Elige un recorrido</h2>
+      <div class="flow-controls">
+        <button class="flow-button" type="button" data-flow="route" aria-pressed="true">Optimizar ruta</button>
+        <button class="flow-button" type="button" data-flow="tracking" aria-pressed="false">Seguir pedido</button>
+        <button class="flow-button" type="button" data-flow="structures" aria-pressed="false">Estructuras</button>
+      </div>
+    </section>
+
+    <section class="walkthrough" aria-live="polite" aria-atomic="true" aria-label="Paso actual del recorrido">
+      <div class="section-title"><span id="guide-flow">Optimización de ruta</span> · <span class="step-count" id="guide-count">Paso 1 de 7</span></div>
+      <h2 class="step-heading" id="guide-title">La interfaz inicia la solicitud</h2>
+      <p class="step-copy" id="guide-copy">El despachador elige los pedidos; la interfaz envía una solicitud HTTP.</p>
+      <div class="progress" id="guide-progress-track" role="progressbar" aria-label="Progreso del recorrido" aria-valuemin="1" aria-valuemax="7" aria-valuenow="1"><span id="guide-progress"></span></div>
+      <div class="step-controls">
+        <button class="step-button" id="step-back" type="button" disabled>← Anterior</button>
+        <button class="step-button" id="step-forward" type="button">Siguiente →</button>
+        <button class="reset-button" id="reset-camera" type="button" aria-label="Restablecer vista 3D">Centrar</button>
+      </div>
+    </section>
+
+    <section class="component" aria-live="polite" aria-label="Componente seleccionado">
+      <div class="component-type" id="component-type">Cliente web</div>
+      <h2 class="component-name" id="component-name">Dashboard Next.js</h2>
+      <p class="component-copy" id="component-copy"></p>
+      <ul class="tag-list" id="component-tags"></ul>
+    </section>
+
+    <section aria-label="Código del componente">
+      <div class="source-head"><h2 class="section-title">Archivos relacionados</h2></div>
+      <div class="source-list" id="source-list"></div>
+    </section>
+
+    <label class="open-option"><input id="open-on-select" type="checkbox" checked>Al seleccionar un bloque, intentar abrir su archivo principal en VS Code</label>
+    <label for="component-picker" class="section-title">Explorar componente</label>
+    <select id="component-picker" aria-label="Explorar componente del diagrama"></select>
+    <p class="status" id="interaction-status" role="status"></p>
+  </aside>
+
+  <div class="legend" aria-label="Leyenda del diagrama">
+    <span class="legend-item"><i class="legend-mark"></i>Paso actual</span>
+    <span class="legend-item optional"><i class="legend-mark base"></i>Conexión</span>
+    <span class="legend-item"><i class="legend-mark selected"></i>Componente</span>
+    <span class="legend-item optional"><i class="legend-mark database"></i>Datos</span>
+  </div>
+  <div class="hint"><span>Arrastra para orbitar · rueda para acercar</span><span>Selecciona un bloque para abrir sus archivos</span></div>
+  <div class="error" id="scene-error" role="alert" hidden>Este navegador no pudo iniciar WebGL para dibujar el esquema 3D.</div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    (() => {
+      'use strict';
+
+      const REPO = '/Users/jhon/Documents/PROYECTO RUTAS ESTRUCTURAS DE DATOS/rutas-pasto';
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const nodes = [
+        { id: 'frontend', name: 'Dashboard Next.js', title: 'Next.js · TypeScript', small: 'CLIENTE WEB', type: 'Interfaz web', color: 0x73d7e3, x: -7, y: 4.5, z: 0, description: 'El despachador y los clientes usan páginas y componentes TypeScript. MapLibre presenta las calles y la ruta; el navegador envía solicitudes HTTP, nunca credenciales de base de datos.', tags: ['Next.js 15', 'TypeScript', 'MapLibre'], files: ['frontend/src/app/dashboard/page.tsx', 'frontend/src/components/MapLibreRouteMap.tsx', 'frontend/src/components/AppShell.tsx'] },
+        { id: 'ios', name: 'App de repartidor', title: 'iPhone · SwiftUI', small: 'CLIENTE MÓVIL', type: 'App nativa', color: 0x91c9dc, x: 7, y: 4.5, z: 0, description: 'La app nativa para iPhone comparte la API FastAPI. Reporta ubicación y consulta el seguimiento autorizado; no se conecta a PostgreSQL.', tags: ['SwiftUI', 'HTTP', 'Misma API'], files: ['ios/RutasPasto/Services/TrackingService.swift', 'ios/RutasPasto/Stores/TrackingStore.swift', 'ios/RutasPasto/Views/ContentView.swift'] },
+        { id: 'gateway', name: 'Reenvío HTTP', title: 'Next rewrites · ALB', small: 'ENTRADA PROTEGIDA', type: 'Enrutamiento HTTP', color: 0x8bb8ed, x: 0, y: 2.7, z: 0, description: 'En desarrollo Next.js reenvía /api/* a FastAPI. En AWS, el ALB enruta /api/* al servicio Python y el resto al frontend, manteniendo un solo origen para el navegador.', tags: ['Local: Next rewrites', 'AWS: ALB', 'Sin acceso directo a DB'], files: ['frontend/next.config.ts', 'deploy/aws/lib/rutas-pasto-stack.ts', 'docs/deployment/aws-cdk.md'] },
+        { id: 'api', name: 'API FastAPI', title: 'Rutas HTTP · Python', small: 'API · BACKEND', type: 'Backend HTTP', color: 0x68e3a2, x: 0, y: 1, z: 0, description: 'Los routers /api validan autenticación, permisos y contratos. Esta frontera protege el acceso a los casos de uso y los datos.', tags: ['FastAPI', 'Pydantic', '/api/*'], files: ['backend/app/main.py', 'backend/app/api/routes.py', 'backend/app/api/orders.py', 'backend/app/api/tracking.py'] },
+        { id: 'schemas', name: 'Contratos Pydantic', title: 'Validación de entrada / salida', small: 'CONTRATOS', type: 'Validación', color: 0x9bdab8, x: -4.8, y: -0.8, z: 0, description: 'Los esquemas tipados validan cuerpos y respuestas en el servidor. La validación visual mejora la experiencia, pero no sustituye esta protección.', tags: ['Pydantic', 'Validación servidor', 'DTOs'], files: ['backend/app/schemas/orders.py', 'backend/app/schemas/couriers.py', 'backend/app/schemas/auth.py'] },
+        { id: 'services', name: 'Servicios de aplicación', title: 'Casos de uso', small: 'REGLAS DE NEGOCIO', type: 'Backend · negocio', color: 0x68e3a2, x: 0, y: -0.8, z: 0, description: 'Orquestan la planificación y el recálculo de rutas, tráfico, ETA, ubicaciones y avisos. Coordinan el núcleo puro y la persistencia.', tags: ['Planificación', 'Tráfico y ETA', 'Avisos'], files: ['backend/app/services/route_planner.py', 'backend/app/services/traffic.py', 'backend/app/services/location_event_queue.py', 'backend/app/services/customer_notifications.py'] },
+        { id: 'notifications', name: 'IA y notificaciones', title: 'Opcionales · consentimiento', small: 'INTEGRACIONES', type: 'Servicios opcionales', color: 0xd2a8e8, x: 5.2, y: -0.8, z: 0, description: 'Las integraciones externas son opcionales. El backend minimiza los datos compartidos y respeta el consentimiento; los avisos se registran antes de intentar entregarse.', tags: ['IA opcional', 'SMTP · Twilio', 'Consentimiento'], files: ['backend/app/services/address_normalization.py', 'backend/app/services/customer_order_chat.py', 'backend/app/services/customer_notifications.py', 'backend/app/repositories/customer_notification_repository.py'] },
+        { id: 'core', name: 'Núcleo de algoritmos', title: 'Optimización · grafos · estructuras', small: 'LÓGICA PURA · PYTHON', type: 'Core independiente', color: 0x77e9a7, x: -4.4, y: -2.8, z: 0, description: 'Código Python independiente de FastAPI y SQLAlchemy. Nearest Neighbor + 2-opt ordenan paradas sobre tiempos viales; el grafo, Dijkstra, A* y MinHeap forman el núcleo académico.', tags: ['Graph · Dijkstra · A*', 'MinHeap', 'Queue · Stack · listas', 'Nearest Neighbor · 2-opt'], files: ['backend/app/core/optimization/nearest_neighbor.py', 'backend/app/core/optimization/two_opt.py', 'backend/app/core/graph/graph.py', 'backend/app/core/graph/dijkstra.py', 'backend/app/core/graph/astar.py', 'backend/app/core/structures/min_heap.py', 'backend/app/core/structures/queue.py', 'backend/app/core/structures/stack.py', 'backend/app/core/structures/doubly_linked_list.py'] },
+        { id: 'providers', name: 'Ruteo y tráfico', title: 'OSRM · TomTom · ORS', small: 'CALLES Y TRÁFICO', type: 'Proveedores externos', color: 0xbd9af2, x: 4.7, y: -2.8, z: 0, description: 'OSRM es primario para matrices de tiempo y geometría de calles. TomTom ajusta solo tramos muestreados; ORS es alternativo. El núcleo no hace llamadas externas.', tags: ['OSRM primario', 'TomTom muestreado', 'ORS alternativo'], files: ['backend/app/core/routing/osrm_client.py', 'backend/app/core/routing/ors_client.py', 'backend/app/core/traffic/tomtom.py', 'backend/app/services/traffic.py'] },
+        { id: 'repository', name: 'Persistencia SQLAlchemy', title: 'Repositorios · transacciones', small: 'ACCESO A DATOS', type: 'Persistencia', color: 0xe5bd73, x: 0, y: -2.8, z: 3.8, description: 'Los repositorios consultan y actualizan entidades con sesiones asíncronas. Las transacciones preservan consistencia entre ruta, paradas, ubicaciones y avisos.', tags: ['SQLAlchemy 2 async', 'Repositorios', 'Transacciones'], files: ['backend/app/db/session.py', 'backend/app/models/entities.py', 'backend/app/repositories/route_repository.py', 'backend/app/repositories/delivery_point_repository.py', 'backend/alembic/env.py'] },
+        { id: 'database', name: 'PostgreSQL', title: 'Pedidos · rutas · eventos', small: 'DATOS PERSISTENTES', type: 'Base de datos', color: 0xf0bd68, x: 0, y: -4.8, z: 3.8, description: 'Almacena pedidos, repartidores, rutas y eventos de ubicación, además de revisiones y avisos pendientes. En AWS está previsto RDS privado; Alembic gestiona las migraciones.', tags: ['PostgreSQL', 'Alembic', 'RDS privado (objetivo)'], files: ['backend/app/models/entities.py', 'backend/app/models/enums.py', 'backend/alembic/versions/0001_adopt_prisma_schema.py', 'docker-compose.yml', 'deploy/aws/lib/rutas-pasto-stack.ts'] }
+      ];
+
+      const edges = [
+        { id: 'web-gateway', from: 'frontend', to: 'gateway', label: 'HTTP /api/*' },
+        { id: 'ios-gateway', from: 'ios', to: 'gateway', label: 'HTTP /api/*' },
+        { id: 'gateway-api', from: 'gateway', to: 'api', label: 'reenvía /api' },
+        { id: 'api-schemas', from: 'api', to: 'schemas', label: 'valida contrato' },
