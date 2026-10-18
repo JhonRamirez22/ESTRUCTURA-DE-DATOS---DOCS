@@ -44,3 +44,49 @@ rounded:
   login: "16px"
   dock: "18px"
 spacing:
+  sm: "8px"
+  md: "12px"
+  lg: "24px"
+  section: "32px"
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.primary-foreground}"
+    typography: "{typography.label}"
+    rounded: "{rounded.control}"
+    padding: "10px 16px"
+  button-secondary:
+    backgroundColor: "{colors.secondary}"
+    rounded: "{rounded.control}"
+    padding: "10px 16px"
+  input:
+    textColor: "{colors.foreground}"
+    rounded: "{rounded.control}"
+    padding: "12px"
+  navigation:
+    padding: "9px 14px"
+  panel:
+    backgroundColor: "{colors.surface}"
+    rounded: "{rounded.panel}"
+  dock:
+    rounded: "{rounded.dock}"
+    padding: "8px 12px"
+---
+
+# Design System: Rutas Pasto
+
+## Overview
+
+**Creative North Star: "Operación oscura · referencia Linear"**
+
+Grafito y lavanda; mapa y paradas conducen el trabajo. Reemplazo autorizado del sistema anterior y atlas rechazado. Fuentes: `globals.css`, `ui/{button,dock,interactive-login}.tsx`, `AppShell.tsx`; contexto: PRODUCT y docs de dirección/frontend.
+
+**Key Characteristics:** navegación horizontal, bordes discretos, superficies tonales, dock por rol. Sin comp raster aprobado. Capturas: `.impeccable/review/linear/`, no inspeccionadas aquí.
+
+## Colors
+
+### Primary
+
+Lavanda para acción y foco; accent-strong aclara hover. Rosa para errores; familias semánticas operativas remapeadas en @theme inline.
+
+### Neutral
