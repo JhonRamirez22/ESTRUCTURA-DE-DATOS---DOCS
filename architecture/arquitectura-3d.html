@@ -214,3 +214,219 @@
         { id: 'ios-gateway', from: 'ios', to: 'gateway', label: 'HTTP /api/*' },
         { id: 'gateway-api', from: 'gateway', to: 'api', label: 'reenvía /api' },
         { id: 'api-schemas', from: 'api', to: 'schemas', label: 'valida contrato' },
+        { id: 'schemas-services', from: 'schemas', to: 'services', label: 'entrada validada' },
+        { id: 'services-core', from: 'services', to: 'core', label: 'pasa matriz de costos' },
+        { id: 'core-services', from: 'core', to: 'services', label: 'orden optimizado' },
+        { id: 'services-providers', from: 'services', to: 'providers', label: 'solicita matriz y calles' },
+        { id: 'providers-services', from: 'providers', to: 'services', label: 'tiempos y geometría' },
+        { id: 'services-repository', from: 'services', to: 'repository', label: 'consulta / guarda' },
+        { id: 'repository-db', from: 'repository', to: 'database', label: 'SQL / commit' },
+        { id: 'db-repository', from: 'database', to: 'repository', label: 'filas persistidas' },
+        { id: 'repository-services', from: 'repository', to: 'services', label: 'entidades' },
+        { id: 'services-api', from: 'services', to: 'api', label: 'respuesta' },
+        { id: 'api-gateway', from: 'api', to: 'gateway', label: 'JSON / status' },
+        { id: 'gateway-web', from: 'gateway', to: 'frontend', label: 'mapa + estado' },
+        { id: 'services-notifications', from: 'services', to: 'notifications', label: 'aviso consentido' },
+        { id: 'notifications-db', from: 'notifications', to: 'database', label: 'outbox' }
+      ];
+
+      const flows = {
+        route: {
+          name: 'Optimización de ruta',
+          nodes: ['frontend', 'gateway', 'api', 'schemas', 'services', 'core', 'providers', 'repository', 'database'],
+          edges: ['web-gateway', 'gateway-api', 'api-schemas', 'schemas-services', 'services-core', 'core-services', 'services-providers', 'providers-services', 'services-repository', 'repository-db', 'db-repository', 'repository-services', 'services-api', 'api-gateway', 'gateway-web'],
+          steps: [
+            { title: 'La interfaz inicia la solicitud', text: 'El despachador elige un repartidor y varios pedidos pendientes. Next.js envía la solicitud HTTP; el navegador nunca accede directamente a PostgreSQL.', focus: 'frontend', nodes: ['frontend', 'gateway'], edges: ['web-gateway'] },
+            { title: 'El acceso conduce a FastAPI', text: 'En local, Next.js reenvía /api/* a FastAPI. En AWS, el ALB hace ese enrutamiento y conserva un solo origen web.', focus: 'gateway', nodes: ['gateway', 'api'], edges: ['gateway-api'] },
+            { title: 'FastAPI valida antes de operar', text: 'Los routers y contratos Pydantic verifican autenticación, permisos y datos. Solo una solicitud válida pasa al caso de uso de planificación.', focus: 'schemas', nodes: ['api', 'schemas', 'services'], edges: ['api-schemas', 'schemas-services'] },
+            { title: 'OSRM aporta las calles y los tiempos', text: 'El servicio obtiene de OSRM una matriz de tiempos viales y la geometría. TomTom puede ajustar tramos muestreados; los proveedores no se importan dentro del núcleo puro.', focus: 'providers', nodes: ['services', 'providers', 'core'], edges: ['services-providers', 'providers-services', 'services-core'] },
+            { title: 'Los algoritmos ordenan las paradas', text: 'Nearest Neighbor propone un orden y 2-opt intenta mejorarlo usando minutos de viaje. Dijkstra y A* son algoritmos académicos; no reemplazan la red vial de OSRM.', focus: 'core', nodes: ['services', 'core'], edges: ['services-core', 'core-services'] },
+            { title: 'La base recibe una operación consistente', text: 'El repositorio persiste ruta, secuencia de paradas e información relacionada en una transacción. Si falla, no debe quedar una ruta a medias.', focus: 'repository', nodes: ['services', 'repository', 'database'], edges: ['services-repository', 'repository-db', 'db-repository', 'repository-services'] },
+            { title: 'MapLibre presenta el resultado', text: 'FastAPI devuelve orden, geometría vial, tiempos y avisos. El frontend dibuja la ruta verde en MapLibre y señala cualquier fallback o degradación.', focus: 'frontend', nodes: ['database', 'repository', 'services', 'api', 'gateway', 'frontend'], edges: ['services-api', 'api-gateway', 'gateway-web'] }
+          ]
+        },
+        tracking: {
+          name: 'Seguimiento de pedido',
+          nodes: ['frontend', 'ios', 'gateway', 'api', 'schemas', 'services', 'repository', 'database', 'notifications'],
+          edges: ['web-gateway', 'ios-gateway', 'gateway-api', 'api-schemas', 'schemas-services', 'services-repository', 'repository-db', 'db-repository', 'repository-services', 'services-notifications', 'notifications-db', 'services-api', 'api-gateway', 'gateway-web'],
+          steps: [
+            { title: 'Cliente o repartidor inicia el seguimiento', text: 'El cliente consulta con su guía; la app iOS reporta una ubicación autenticada. Ambos usan la misma API y no una conexión directa a la base.', focus: 'ios', nodes: ['frontend', 'ios', 'gateway'], edges: ['web-gateway', 'ios-gateway'] },
+            { title: 'El backend valida acceso y formato', text: 'FastAPI comprueba autorización y contrato en el servidor. Los datos privados del pedido permanecen en el flujo protegido del backend.', focus: 'api', nodes: ['gateway', 'api', 'schemas'], edges: ['gateway-api', 'api-schemas'] },
+            { title: 'El servicio consulta el estado real', text: 'El caso de uso resuelve el pedido asociado a la guía y calcula el ETA disponible. Si una IA opcional falla, continúa la respuesta determinista.', focus: 'services', nodes: ['schemas', 'services'], edges: ['schemas-services'] },
+            { title: 'La persistencia conserva ruta e historial', text: 'Los repositorios consultan PostgreSQL. Una cola FIFO serializa las escrituras GPS y aplica backpressure para proteger la base.', focus: 'database', nodes: ['services', 'repository', 'database'], edges: ['services-repository', 'repository-db', 'db-repository', 'repository-services'] },
+            { title: 'Los avisos dependen del consentimiento', text: 'Los avisos autorizados se anotan en el outbox y se intentan entregar después del commit. Sin credenciales, permanecen pendientes: no se simula el envío.', focus: 'notifications', nodes: ['services', 'notifications', 'database'], edges: ['services-notifications', 'notifications-db'] },
+            { title: 'La respuesta revela solo lo necesario', text: 'La API devuelve estado y datos permitidos para esa guía. La interfaz representa el seguimiento sin exponer pedidos de otros clientes.', focus: 'frontend', nodes: ['services', 'api', 'gateway', 'frontend'], edges: ['services-api', 'api-gateway', 'gateway-web'] }
+          ]
+        },
+        structures: {
+          name: 'Estructuras de datos',
+          nodes: ['services', 'core', 'providers'],
+          edges: ['services-core', 'core-services', 'services-providers', 'providers-services'],
+          steps: [
+            { title: 'OSRM entrega costos al servicio', text: 'La matriz de tiempos por calles llega desde OSRM al servicio de planificación. El servicio la pasa como dato al núcleo; las estructuras no realizan llamadas HTTP.', focus: 'providers', nodes: ['services', 'providers'], edges: ['services-providers', 'providers-services'] },
+            { title: 'Nearest Neighbor propone la visita', text: 'La matriz en minutos permite elegir cada siguiente parada según el tiempo vial desde la parada actual. La Queue FIFO se usa aparte para serializar ubicaciones GPS.', focus: 'core', nodes: ['services', 'core'], edges: ['services-core'] },
+            { title: '2-opt intenta acortar la ruta', text: 'El algoritmo invierte segmentos si disminuye el costo del camino abierto. Luego el servicio solicita la geometría vial del orden resultante.', focus: 'core', nodes: ['core', 'services'], edges: ['core-services', 'services-providers'] },
+            { title: 'Grafo y MinHeap resuelven caminos ponderados', text: 'El grafo dirigido guarda aristas y costos; Dijkstra y A* usan MinHeap. Son implementaciones propias, no sustitutos del mapa vial real.', focus: 'core', nodes: ['services', 'core'], edges: ['services-core', 'core-services'] },
+            { title: 'Queue, Stack y listas ayudan a operar', text: 'Queue serializa eventos GPS; Stack conserva snapshots para deshacer un recálculo; la lista doble mueve entradas de la caché LRU en O(1).', focus: 'core', nodes: ['services', 'core'], edges: ['services-core', 'core-services'] }
+          ]
+        }
+      };
+
+      const canvas = document.getElementById('architecture-scene');
+      const status = document.getElementById('interaction-status');
+      const picker = document.getElementById('component-picker');
+      const sourceList = document.getElementById('source-list');
+      const nodeById = new Map(nodes.map(node => [node.id, node]));
+      const edgeById = new Map(edges.map(edge => [edge.id, edge]));
+      let activeFlow = 'route';
+      let activeStep = 0;
+      let selectedId = 'frontend';
+      let yaw = -.38;
+      let pitch = .44;
+      let zoom = 1;
+      let drag = null;
+      let renderer;
+      let camera;
+      let scene;
+      let cameraTarget;
+      const nodeMeshes = new Map();
+      const edgeMeshes = new Map();
+      const raycaster = new THREE.Raycaster();
+      const pointer = new THREE.Vector2();
+
+      function showSceneError(message) {
+        const error = document.getElementById('scene-error');
+        error.textContent = message;
+        error.hidden = false;
+      }
+
+      function vscodeUri(relativePath) {
+        const fullPath = `${REPO}/${relativePath}`;
+        const encoded = fullPath.split('/').map(part => encodeURIComponent(part)).join('/');
+        return `vscode://file${encoded}:1:1`;
+      }
+
+      function resetOverviewTarget() {
+        if (cameraTarget) cameraTarget.set(window.innerWidth < 760 ? 0 : -3.8, 0, 0);
+      }
+
+      function selectNode(id, openCode = false, focusCamera = false) {
+        const node = nodeById.get(id);
+        if (!node) return;
+        selectedId = id;
+        document.getElementById('component-type').textContent = node.type;
+        document.getElementById('component-name').textContent = node.name;
+        document.getElementById('component-copy').textContent = node.description;
+        document.getElementById('component-tags').replaceChildren(...node.tags.map(value => {
+          const tag = document.createElement('li');
+          tag.textContent = value;
+          return tag;
+        }));
+        sourceList.replaceChildren(...node.files.map((file, index) => {
+          const link = document.createElement('a');
+          const basename = file.split('/').pop();
+          link.className = 'source-link';
+          link.href = vscodeUri(file);
+          link.title = `Abrir ${file} en VS Code`;
+          const name = document.createElement('strong');
+          name.textContent = index === 0 ? `Principal · ${basename}` : basename;
+          const path = document.createElement('small');
+          path.textContent = file;
+          link.append(name, path);
+          link.addEventListener('click', () => { status.textContent = `Intentando abrir ${file} en VS Code…`; });
+          return link;
+        }));
+        picker.value = id;
+        if (focusCamera && cameraTarget) {
+          const isMobile = window.innerWidth < 760;
+          cameraTarget.set(node.x - (isMobile ? 0 : 3.8), node.y - (isMobile ? 2.2 : 0), node.z);
+        }
+        if (openCode && document.getElementById('open-on-select').checked) {
+          window.open(vscodeUri(node.files[0]), '_blank');
+          status.textContent = `Componente seleccionado: ${node.name}. Intentando abrir su archivo principal en VS Code.`;
+        } else {
+          status.textContent = `Componente seleccionado: ${node.name}.`;
+        }
+        updateSceneState();
+      }
+
+      function showStep(index) {
+        const flow = flows[activeFlow];
+        activeStep = Math.max(0, Math.min(flow.steps.length - 1, index));
+        const step = flow.steps[activeStep];
+        const number = activeStep + 1;
+        document.getElementById('guide-flow').textContent = flow.name;
+        document.getElementById('guide-count').textContent = `Paso ${number} de ${flow.steps.length}`;
+        document.getElementById('guide-title').textContent = step.title;
+        document.getElementById('guide-copy').textContent = step.text;
+        const progress = document.getElementById('guide-progress-track');
+        progress.setAttribute('aria-valuemax', String(flow.steps.length));
+        progress.setAttribute('aria-valuenow', String(number));
+        document.getElementById('guide-progress').style.width = `${number / flow.steps.length * 100}%`;
+        document.getElementById('step-back').disabled = activeStep === 0;
+        document.getElementById('step-forward').disabled = activeStep === flow.steps.length - 1;
+        resetOverviewTarget();
+        selectNode(step.focus);
+        updateSceneState();
+      }
+
+      function setFlow(id) {
+        if (!flows[id]) return;
+        activeFlow = id;
+        document.querySelectorAll('[data-flow]').forEach(button => {
+          button.setAttribute('aria-pressed', String(button.dataset.flow === id));
+        });
+        showStep(0);
+      }
+
+      function makeFaceTexture(title, detail, accent) {
+        const face = document.createElement('canvas');
+        face.width = 640;
+        face.height = 220;
+        const context = face.getContext('2d');
+        context.fillStyle = '#14231c';
+        context.fillRect(0, 0, face.width, face.height);
+        context.fillStyle = `#${accent.toString(16).padStart(6, '0')}`;
+        context.fillRect(0, 0, 10, face.height);
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        context.fillStyle = '#edf5ef';
+        let fontSize = 42;
+        context.font = `600 ${fontSize}px system-ui, sans-serif`;
+        let label = title;
+        while (context.measureText(label).width > 565 && fontSize > 27) {
+          fontSize -= 2;
+          context.font = `600 ${fontSize}px system-ui, sans-serif`;
+        }
+        context.fillText(label, 325, 83, 565);
+        context.fillStyle = '#a8bdaf';
+        context.font = '500 25px system-ui, sans-serif';
+        context.fillText(detail, 325, 158, 565);
+        const texture = new THREE.CanvasTexture(face);
+        texture.needsUpdate = true;
+        return texture;
+      }
+
+      function makeLaneLabel(text, x, y, z) {
+        const face = document.createElement('canvas');
+        face.width = 512;
+        face.height = 80;
+        const context = face.getContext('2d');
+        context.font = '600 30px system-ui, sans-serif';
+        context.fillStyle = '#91a99a';
+        context.textBaseline = 'middle';
+        context.fillText(text, 8, 42);
+        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(face), transparent: true, depthTest: false, opacity: .66 }));
+        sprite.position.set(x, y, z);
+        sprite.scale.set(5.6, .88, 1);
+        scene.add(sprite);
+        return sprite;
+      }
+
+      function createNode(node) {
+        const group = new THREE.Group();
+        group.position.set(node.x, node.y, node.z);
+        const material = new THREE.MeshStandardMaterial({
+          color: 0x263b30,
+          roughness: .38,
+          metalness: .22,
