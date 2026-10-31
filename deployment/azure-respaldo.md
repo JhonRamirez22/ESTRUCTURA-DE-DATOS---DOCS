@@ -28,7 +28,7 @@ La contraseña de la base y los secretos viven como secretos de la Container App
 
 | Pieza | Apagado | Límite |
 |---|---|---|
-| Container App | Ingreso deshabilitado y `min-replicas 0` | No existe un «stop» para Container Apps. Sin ingreso no recibe tráfico y no queda réplica tras el enfriamiento de escalado |
+| Container App | Detenida con la acción `stop` de ARM (estado `Stopped`, 0 réplicas) y con el ingreso deshabilitado | El entorno express no escala a cero ni admite desactivar revisiones; `az containerapp stop` no existe en la CLI, se usa `az rest` |
 | PostgreSQL | `az postgres flexible-server stop` | **Azure lo reinicia solo a los 7 días.** Hay que volver a detenerlo o se cobra el cómputo |
 | ACR | Sigue activo | Cuesta unos centavos al día; contiene la imagen |
 | AWS ECS | Autoescalado en 0/0 y `desiredCount 0` | La RDS de AWS **sigue encendida** y con todos los datos |
@@ -37,6 +37,8 @@ La contraseña de la base y los secretos viven como secretos de la Container App
 
 ```bash
 az postgres flexible-server start -g rg-rutas-pasto -n rutaspgb96abe
+ID=$(az containerapp show -g rg-rutas-pasto -n ca-rutas-pasto-api --query id -o tsv)
+az rest --method post --url "https://management.azure.com${ID}/start?api-version=2025-01-01"
 az containerapp ingress enable -g rg-rutas-pasto -n ca-rutas-pasto-api --type external --target-port 8000
 az containerapp update -g rg-rutas-pasto -n ca-rutas-pasto-api --min-replicas 1 --max-replicas 1
 az containerapp show -g rg-rutas-pasto -n ca-rutas-pasto-api --query properties.configuration.ingress.fqdn -o tsv
@@ -48,7 +50,8 @@ Después, comprobar `https://<fqdn>/api/v1/health` y cambiar `PYTHON_API_URL` en
 
 ```bash
 az containerapp ingress disable -g rg-rutas-pasto -n ca-rutas-pasto-api
-az containerapp update -g rg-rutas-pasto -n ca-rutas-pasto-api --min-replicas 0 --max-replicas 1
+ID=$(az containerapp show -g rg-rutas-pasto -n ca-rutas-pasto-api --query id -o tsv)
+az rest --method post --url "https://management.azure.com${ID}/stop?api-version=2025-01-01"
 az postgres flexible-server stop -g rg-rutas-pasto -n rutaspgb96abe
 ```
 
