@@ -12,7 +12,7 @@ Suscripción «Azure for Students». La política solo permite las regiones `mex
 | PostgreSQL Flexible Server 16 | `rutaspgb96abe` | Burstable B1ms, 32 GB, base `rutas_pasto`, usuario `rutasadmin`, acceso público solo desde servicios de Azure |
 | Azure Container Registry | `rutaspastofb2dfd` | Básico, usuario administrador activo (el entorno express no admite identidad administrada para extraer imágenes) |
 | Entorno de Container Apps | `cae-rutas-pasto` | Entorno express |
-| Container App | `ca-rutas-pasto-api` | Imagen `rutas-pasto-api:api-55f5a13` (linux/amd64), puerto 8000, 0,5 vCPU y 1 GiB |
+| Container App | `ca-rutas-pasto-api` | Ejecuta `api-55f5a13` (linux/amd64), puerto 8000, 0,5 vCPU y 1 GiB. En ACR ya está `api-6e50fca` (optimización exacta Held-Karp); se activa con `az containerapp update --image` al encender |
 
 La contraseña de la base y los secretos viven como secretos de la Container App. No están en Git.
 
@@ -29,7 +29,7 @@ La contraseña de la base y los secretos viven como secretos de la Container App
 | Pieza | Apagado | Límite |
 |---|---|---|
 | Container App | Detenida con la acción `stop` de ARM (estado `Stopped`, 0 réplicas) y con el ingreso deshabilitado | El entorno express no escala a cero ni admite desactivar revisiones; `az containerapp stop` no existe en la CLI, se usa `az rest` |
-| PostgreSQL | `az postgres flexible-server stop` | **Azure lo reinicia solo a los 7 días.** Hay que volver a detenerlo o se cobra el cómputo |
+| PostgreSQL | `az postgres flexible-server stop` | **Azure lo reinicia solo a los 7 días** (ya ocurrió el 9 de noviembre y se volvió a detener). Hay que volver a detenerlo o se cobra el cómputo |
 | ACR | Sigue activo | Cuesta unos centavos al día; contiene la imagen |
 | AWS ECS | Autoescalado en 0/0 y `desiredCount 0` | La RDS de AWS **sigue encendida** y con todos los datos |
 
