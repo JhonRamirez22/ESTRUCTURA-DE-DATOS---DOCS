@@ -12,7 +12,7 @@ Suscripción «Azure for Students». La política solo permite las regiones `mex
 | PostgreSQL Flexible Server 16 | `rutaspgb96abe` | Burstable B1ms, 32 GB, base `rutas_pasto`, usuario `rutasadmin`, acceso público solo desde servicios de Azure |
 | Azure Container Registry | `rutaspastofb2dfd` | Básico, usuario administrador activo (el entorno express no admite identidad administrada para extraer imágenes) |
 | Entorno de Container Apps | `cae-rutas-pasto` | Entorno express |
-| Container App | `ca-rutas-pasto-api` | Ejecuta `api-55f5a13` (linux/amd64), puerto 8000, 0,5 vCPU y 1 GiB. En ACR ya está `api-6e50fca` (optimización exacta Held-Karp); se activa con `az containerapp update --image` al encender |
+| Container App | `ca-rutas-pasto-api` | Ejecuta `api-55f5a13` (linux/amd64), puerto 8000, 0,5 vCPU y 1 GiB. En ACR ya está `api-b70063d` (optimización exacta, límites por cliente y candado de origen); se activa con `az containerapp update --image` al encender. La app ya tiene el secreto y la variable `ORIGIN_AUTH_SECRET`, el mismo valor que Vercel |
 
 La contraseña de la base y los secretos viven como secretos de la Container App. No están en Git.
 
@@ -74,3 +74,7 @@ az acr login -n rutaspastofb2dfd
 docker buildx build --platform linux/amd64 -t rutaspastofb2dfd.azurecr.io/rutas-pasto-api:api-<sha> --push .
 az containerapp update -g rg-rutas-pasto -n ca-rutas-pasto-api --image rutaspastofb2dfd.azurecr.io/rutas-pasto-api:api-<sha>
 ```
+
+## Aviso al modificar la app mientras está detenida
+
+Cualquier `az containerapp update` o `secret set` sobre una app detenida crea una revisión nueva y **arranca una réplica** aunque el estado siga diciendo `Stopped`. Después de cambiar algo, deja `--min-replicas 0` y repite `start` y luego `stop` con la acción de ARM hasta que `az containerapp replica list` devuelva 0. La acción `stop` responde 400 si ya está detenida; es normal.
