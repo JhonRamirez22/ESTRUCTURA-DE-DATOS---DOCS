@@ -1,6 +1,12 @@
-# Backend en Azure (apagado) y AWS en pausa
+# Backend en Azure y AWS en pausa
 
-Estado al 31 de octubre de 2026. El backend FastAPI quedó desplegado en Azure y **apagado**. El servicio de AWS también quedó en 0 tareas: **mientras ninguno esté encendido, la aplicación no tiene API**.
+**Estado al 20 de noviembre de 2026: Azure está ENCENDIDO** (imagen `api-358995f`, esquema Alembic `0013_order_priority`, `PYTHON_API_URL` de Vercel apuntando a `ca-rutas-pasto-api.mangobush-7ec3063e.canadacentral.azurecontainerapps.io`). El servicio de AWS sigue en 0 tareas. Las secciones «Cómo está apagado» y «Apagar Azure» describen cómo volver al estado apagado del 31 de octubre.
+
+Migrar desde el contenedor (necesita un pty, por eso `script`):
+
+```bash
+script -q /dev/null az containerapp exec -g rg-rutas-pasto -n ca-rutas-pasto-api --command 'sh -c "cd /app && alembic upgrade head"'
+```
 
 ## Recursos en Azure
 
