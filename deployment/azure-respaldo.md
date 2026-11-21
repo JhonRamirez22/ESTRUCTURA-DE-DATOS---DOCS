@@ -1,6 +1,6 @@
 # Backend en Azure y AWS en pausa
 
-**Estado al 20 de noviembre de 2026: Azure está ENCENDIDO** (imagen `api-358995f`, esquema Alembic `0013_order_priority`, `PYTHON_API_URL` de Vercel apuntando a `ca-rutas-pasto-api.mangobush-7ec3063e.canadacentral.azurecontainerapps.io`). El servicio de AWS sigue en 0 tareas. Las secciones «Cómo está apagado» y «Apagar Azure» describen cómo volver al estado apagado del 31 de octubre.
+**Estado al 20 de noviembre de 2026: Azure está ENCENDIDO** (imagen `api-3d94372`, esquema Alembic `0013_order_priority`, `DEMO_MODE=true` y `AI_TEXT_PHRASING_ENABLED=true`, `PYTHON_API_URL` de Vercel apuntando a `ca-rutas-pasto-api.mangobush-7ec3063e.canadacentral.azurecontainerapps.io`). El servicio de AWS sigue en 0 tareas. Las secciones «Cómo está apagado» y «Apagar Azure» describen cómo volver al estado apagado del 31 de octubre.
 
 Migrar desde el contenedor (necesita un pty, por eso `script`):
 
@@ -84,3 +84,14 @@ az containerapp update -g rg-rutas-pasto -n ca-rutas-pasto-api --image rutaspast
 ## Aviso al modificar la app mientras está detenida
 
 Cualquier `az containerapp update` o `secret set` sobre una app detenida crea una revisión nueva y **arranca una réplica** aunque el estado siga diciendo `Stopped`. Después de cambiar algo, deja `--min-replicas 0` y repite `start` y luego `stop` con la acción de ARM hasta que `az containerapp replica list` devuelva 0. La acción `stop` responde 400 si ya está detenida; es normal.
+
+## Interruptores de entorno añadidos el 20 de noviembre de 2026
+
+| Variable | Efecto | Estado en Azure |
+|---|---|---|
+| `DEMO_MODE` | Muestra «Renovar GPS demo» y habilita `POST /api/v1/demo/renovar-gps` (renueva solo a los repartidores «Demo ·») | `true` (entorno de demostración) |
+| `AI_TEXT_PHRASING_ENABLED` | Groq redacta avisos con cifras y alias, sin ubicaciones, nombres ni direcciones (usa `CUSTOMER_CHAT_*`) | `true` |
+| `TIME_WINDOWS_ENABLED`, `AI_SUGGESTIONS_ENABLED`, `JOINT_ASSIGNMENT_ENABLED` | Ventanas horarias, avisos en contexto y reparto conjunto | valor por defecto (`true`) |
+| `TRAFFIC_HISTORY_ENABLED` | Guarda y usa el historial de tráfico para el ETA histórico | apagado |
+
+Con una operación real, apagar `DEMO_MODE` (`az containerapp update ... --set-env-vars DEMO_MODE=false`).
